@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>아파트 인테리어 현황판</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* 뷰어 전용 스타일 추가 */
+        body { background-color: #f0f2f5; padding: 40px; }
+        .header { text-align: center; margin-bottom: 40px; }
+        .legend { display: flex; justify-content: center; gap: 20px; margin-bottom: 20px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        
+        /* 상태별 색상 정의 */
+        .status-before { background-color: #e0e0e0; color: #757575; } /* 시공전: 회색 */
+        .status-ing { background-color: #fff3cd; border-color: #ffc107; color: #856404; } /* 시공중: 노랑 */
+        .status-done { background-color: #d1e7dd; border-color: #198754; color: #0f5132; } /* 완료: 초록 */
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>101동 인테리어 시공 현황</h1>
+        <div class="legend">
+            <span class="legend-item"><div class="dot" style="background:#e0e0e0"></div>시공전</span>
+            <span class="legend-item"><div class="dot" style="background:#ffc107"></div>시공중</span>
+            <span class="legend-item"><div class="dot" style="background:#198754"></div>완료</span>
+        </div>
+    </div>
+
+    <div id="grid-container" style="display: flex; justify-content: center;">
+        Loading...
+    </div>
+
+<script type="module">
+        import { SheetAPI } from './js/api.js';
+
+        async function loadViewer() {
+            const mainContainer = document.getElementById('grid-container');
+            mainContainer.innerHTML = 'Loading data...';
+            
+            try {
+                // 1. 전체 데이터 가져오기
+                const res = await SheetAPI.action('read_all', {});
+                if (res.result !== 'success') throw new Error(res.message);
+                
+                const units = res.data;
+                if (!units || units.length === 0) {
+                    mainContainer.innerHTML = "데이터가 없습니다.";
+                    return;
+                }
+
+                // 2. 동별로 데이터 그룹화 (Grouping)
+                // 결과 예시: { "101": [unit, unit...], "102": [...] }
+                const unitsByDong = units.reduce((acc, unit) => {
+                    const dong = unit.dong;
+                    if (!acc[dong]) acc[dong] = [];
+                    acc[dong].push(unit);
+                    return acc;
+                }, {});
+
+                // 3. 화면 초기화 및 동별 렌더링 시작
+                mainContainer.innerHTML = '';
+                
+                // 동 번호 순서대로 정렬 (101, 102, 103...)
+                const sortedDongs = Object.keys(unitsByDong).sort();
+
+                sortedDongs.forEach(dong => {
+                    const dongUnits = unitsByDong[dong];
+                    
+                    // [수정] 각 동을 감쌀 래퍼(Wrapper) 생성
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'dong-wrapper'; 
+                    // 기존에 있던 style.display, style.verticalAlign 등은 제거! (CSS가 처리함)
+
+                    // 타이틀 (예: 101동)
+                    const title = document.createElement('h3');
+                    title.textContent = `${dong}동`;
+                    wrapper.appendChild(title);
+
+                    // 해당 동의 그리드 컨테이너 생성
+                    const gridBox = document.createElement('div');
+                    renderSingleGrid(dongUnits, gridBox); 
+                    wrapper.appendChild(gridBox);
+
+                    // 메인 컨테이너에 추가
+                    mainContainer.appendChild(wrapper);
+                });
+
+            } catch (error) {
+                console.error(error);
+                mainContainer.innerHTML = `오류 발생: ${error.message}`;
+            }
+        }
+
+        // 단일 동의 그리드를 그리는 함수 (기존 renderGrid 개선)
+        function renderSingleGrid(units, container) {
+            // 해당 동의 최대 층/라인 계산
+            const maxFloor = Math.max(...units.map(u => u.floor));
+            const maxLine = Math.max(...units.map(u => u.line));
+
+            const table = document.createElement('table');
+            table.className = 'grid-table';
+
+            // 빠른 검색용 Map
+            const unitMap = new Map();
+            units.forEach(u => unitMap.set(`${u.floor}_${u.line}`, u));
+
+            // 병합 처리를 위한 추적 배열 (2차원 배열: 방문 여부 체크)
+            // visited[floor][line] = true/false
+            const visited = Array.from({ length: maxFloor + 1 }, () => Array(maxLine + 1).fill(false));
+
+            for (let f = maxFloor; f >= 1; f--) {
+                const tr = document.createElement('tr');
+                for (let l = 1; l <= maxLine; l++) {
+                    // 이미 병합된 영역에 포함된 셀이면 건너뜀 (렌더링 안 함)
+                    if (visited[f][l]) continue;
+
+                    const unit = unitMap.get(`${f}_${l}`);
+                    const td = document.createElement('td');
+
+                    if (!unit) {
+                        // 1. 아예 데이터가 없는 경우 (공백)
+                        td.className = 'empty-cell';
+                        td.style.border = 'none'; 
+                    } else {
+                        // 2. 데이터는 있지만 '사용안함(Inactive)'인 경우
+                        // 구글 시트에서 boolean값은 TRUE/FALSE(대문자)로 올 수도 있고, true/false(bool)로 올 수도 있음
+                        const isActive = (unit.is_active === true || unit.is_active === "TRUE" || unit.is_active === "true");
+
+                        if (!isActive) {
+                            // [수정됨] 사선 처리 클래스 적용
+                            td.className = 'grid-cell inactive-cell';
+                            // 호수는 보여주되 연하게, 혹은 아예 안 보여주려면 textContent를 비움
+                            td.textContent = unit.ho; 
+                        } else {
+                            // 3. 정상 사용 중인 호실
+                            td.className = `grid-cell status-${unit.status || 'before'}`;
+                            td.textContent = unit.ho;
+                            
+                            // 클릭 이벤트는 활성화된 호실에만 부여
+                            td.onclick = () => alert(`${unit.dong}동 ${unit.ho}호 (${unit.type}) 상세정보`);
+                        }
+
+                        td.dataset.id = unit.unique_id;
+
+                        // 병합 처리 (공통)
+                        const rs = unit.row_span || 1;
+                        const cs = unit.col_span || 1;
+
+                        if (rs > 1) td.rowSpan = rs;
+                        if (cs > 1) td.colSpan = cs;
+
+                        // 병합 영역 방문 처리 (공통)
+                        for (let i = 0; i < rs; i++) {
+                            for (let j = 0; j < cs; j++) {
+                                if (i === 0 && j === 0) continue; 
+                                const targetF = f - i; 
+                                const targetL = l + j; 
+                                if (targetF >= 1 && targetL <= maxLine) {
+                                    visited[targetF][targetL] = true;
+                                }
+                            }
+                        }
+                    }
+                    tr.appendChild(td);
+                }
+                table.appendChild(tr);
+            }
+            container.appendChild(table);
+        }
+
+        loadViewer();
+    </script>
+</body>
+</html>
