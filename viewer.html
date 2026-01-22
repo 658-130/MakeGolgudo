@@ -36,6 +36,33 @@
 <script type="module">
         import { SheetAPI } from './js/api.js';
 
+        // 타입별 색상 팔레트 (파스텔톤 위주)
+        // 미리 정의된 타입 외에는 해시 함수로 색상 자동 생성
+        const TYPE_COLORS = {
+            '84A': '#a5d6a7', // 녹색 계열
+            '84B': '#81c784',
+            '59A': '#90caf9', // 청색 계열
+            '59B': '#64b5f6',
+            '74':  '#fff59d', // 노랑 계열
+            '102': '#ffcc80', // 주황 계열
+            'PH':  '#ce93d8', // 보라 (펜트하우스)
+            'special': '#e0e0e0' // 기타 시설
+        };
+
+        // 색상 가져오는 함수 (없으면 자동 생성)
+        function getColorByType(type) {
+            if (!type) return '#ffffff'; // 타입 없으면 흰색
+            if (TYPE_COLORS[type]) return TYPE_COLORS[type];
+
+            // 정의되지 않은 타입은 랜덤 파스텔 컬러 생성 (같은 타입은 같은 색 유지)
+            let hash = 0;
+            for (let i = 0; i < type.length; i++) {
+                hash = type.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const h = hash % 360;
+            return `hsl(${h}, 70%, 85%)`; // HSL로 부드러운 색상 생성
+        }
+
         async function loadViewer() {
             const mainContainer = document.getElementById('grid-container');
             mainContainer.innerHTML = 'Loading data...';
@@ -62,31 +89,43 @@
 
                 // 3. 화면 초기화 및 동별 렌더링 시작
                 mainContainer.innerHTML = '';
-                
+
+                // 전체 데이터에서 사용된 모든 타입 추출 (범례용)
+                const allTypes = new Set();
+                units.forEach(u => {
+                    if (u.type && u.is_active !== false) allTypes.add(u.type);
+                });
+
                 // 동 번호 순서대로 정렬 (101, 102, 103...)
                 const sortedDongs = Object.keys(unitsByDong).sort();
 
                 sortedDongs.forEach(dong => {
                     const dongUnits = unitsByDong[dong];
                     
-                    // [수정] 각 동을 감쌀 래퍼(Wrapper) 생성
                     const wrapper = document.createElement('div');
-                    wrapper.className = 'dong-wrapper'; 
-                    // 기존에 있던 style.display, style.verticalAlign 등은 제거! (CSS가 처리함)
+                    wrapper.className = 'dong-wrapper';
+                    
+                    // [변경] 상단 타이틀 제거 (하단으로 이동했으므로)
+                    // const title = document.createElement('h3'); ... (삭제)
 
-                    // 타이틀 (예: 101동)
-                    const title = document.createElement('h3');
-                    title.textContent = `${dong}동`;
-                    wrapper.appendChild(title);
-
-                    // 해당 동의 그리드 컨테이너 생성
                     const gridBox = document.createElement('div');
-                    renderSingleGrid(dongUnits, gridBox); 
+                    // 그리드 렌더링 시 최대 라인 수 반환받음 (하단 라벨 폭 맞추기 위해)
+                    const maxLine = renderSingleGrid(dongUnits, gridBox); 
                     wrapper.appendChild(gridBox);
 
-                    // 메인 컨테이너에 추가
+                    // [신규] 하단 동 표시 (셀 형태)
+                    const dongLabel = document.createElement('div');
+                    dongLabel.className = 'dong-label';
+                    dongLabel.textContent = `${dong}동`;
+                    // 테이블 너비와 맞추기 위해 width 설정 (CSS Grid라면 더 쉽지만 Table이므로)
+                    // 간단히는 width: 100% 로 처리됨 (wrapper 기준)
+                    wrapper.appendChild(dongLabel);
+
                     mainContainer.appendChild(wrapper);
                 });
+
+                // [신규] 범례(Legend) 생성
+                renderLegend(allTypes);
 
             } catch (error) {
                 console.error(error);
@@ -98,10 +137,10 @@
         function renderSingleGrid(units, container) {
             // 해당 동의 최대 층/라인 계산
             const maxFloor = Math.max(...units.map(u => u.floor));
-            const maxLine = Math.max(...units.map(u => u.line));
+            const maxLine = Math.max(...units.map(u => u.line)); // 리턴값용
 
             const table = document.createElement('table');
-            table.className = 'grid-table';
+            table.className = 'grid-table'; 
 
             // 빠른 검색용 Map
             const unitMap = new Map();
@@ -120,10 +159,10 @@
                     const unit = unitMap.get(`${f}_${l}`);
                     const td = document.createElement('td');
 
-                    if (!unit) {
-                        // 1. 아예 데이터가 없는 경우 (공백)
-                        td.className = 'empty-cell';
-                        td.style.border = 'none'; 
+                    if (!unit || unit.is_active === false || unit.is_active === "false") {
+                        // 삭제된 호실 (Void)
+                        td.className = 'empty-cell'; // 투명 처리
+                        td.style.border = 'none';
                     } else {
                         // 2. 데이터는 있지만 '사용안함(Inactive)'인 경우
                         // 구글 시트에서 boolean값은 TRUE/FALSE(대문자)로 올 수도 있고, true/false(bool)로 올 수도 있음
@@ -135,13 +174,22 @@
                             // 호수는 보여주되 연하게, 혹은 아예 안 보여주려면 textContent를 비움
                             td.textContent = unit.ho; 
                         } else {
-                            // 3. 정상 사용 중인 호실
-                            td.className = `grid-cell status-${unit.status || 'before'}`;
-                            td.textContent = unit.ho;
-                            
-                            // 클릭 이벤트는 활성화된 호실에만 부여
-                            td.onclick = () => alert(`${unit.dong}동 ${unit.ho}호 (${unit.type}) 상세정보`);
-                        }
+                            // 3. 정상 사용 중인 호실 (수정됨)
+                                td.className = 'grid-cell'; // 상태 클래스 제거 (배경색으로 대체)
+                                td.textContent = unit.ho;
+
+                                // [핵심 수정] 상태 대신 '타입'에 따른 배경색 적용
+                                // getColorByType 함수가 필요합니다 (스크립트 상단에 정의 필요)
+                                td.style.backgroundColor = getColorByType(unit.type);
+                                
+                                // 특수 명칭(어린이집 등)인 경우 글씨 굵게
+                                if (isNaN(unit.ho)) {
+                                    td.style.fontWeight = 'bold';
+                                }
+
+                                // 클릭 이벤트
+                                td.onclick = () => alert(`${unit.dong}동 ${unit.ho}호 (${unit.type}) 상세정보`);
+                            }
 
                         td.dataset.id = unit.unique_id;
 
@@ -171,6 +219,32 @@
             container.appendChild(table);
         }
 
+        function renderLegend(typesSet) {
+        const legendBox = document.createElement('div');
+        legendBox.className = 'legend-container';
+        
+        // 정렬해서 표시
+        const types = Array.from(typesSet).sort();
+        
+        types.forEach(type => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            
+            const colorBox = document.createElement('div');
+            colorBox.className = 'legend-color';
+            colorBox.style.backgroundColor = getColorByType(type);
+            
+            const text = document.createElement('span');
+            text.textContent = type;
+            
+            item.appendChild(colorBox);
+            item.appendChild(text);
+            legendBox.appendChild(item);
+        });
+
+        // 범례를 메인 컨테이너 하단이나 body 하단에 추가
+        document.body.appendChild(legendBox); // 혹은 원하는 위치
+    }
         loadViewer();
     </script>
 </body>

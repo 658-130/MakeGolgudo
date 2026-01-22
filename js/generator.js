@@ -9,6 +9,8 @@ export class VisualGenerator {
     this.isDragging = false;
     this.startCell = null; // 드래그 시작 셀
     this.selectedCells = []; // 현재 선택된 셀 목록
+    this.menu = document.getElementById('context-menu'); // [추가] 컨텍스트 메뉴 엘리먼트
+    document.addEventListener('click', () => this.hideMenu()); // 메뉴 닫기 이벤트 (다른 곳 클릭 시 닫힘)
   }
 
   /**
@@ -28,6 +30,8 @@ export class VisualGenerator {
     this.table.addEventListener('mousedown', (e) => this.onMouseDown(e));
     this.table.addEventListener('mouseover', (e) => this.onMouseOver(e));
     this.table.addEventListener('mouseup', () => this.onMouseUp());
+    // [중요] 테이블 전체에 우클릭 이벤트(contextmenu) 걸기
+    this.table.addEventListener('contextmenu', (e) => this.handleContextMenu(e));
     // 테이블 밖으로 나갔을 때 드래그 종료 처리
     document.addEventListener('mouseup', () => (this.isDragging = false));
 
@@ -59,6 +63,13 @@ export class VisualGenerator {
    * 2. 마우스 이벤트 핸들러 (드래그 선택 로직)
    */
   onMouseDown(e) {
+    // [추가됨] 우클릭(button 2)인 경우, 드래그 선택 로직을 시작하지 않고 무시함
+    if (e.button === 2) return;
+    if (e.target.tagName !== 'TD') return;
+    this.isDragging = true;
+    this.clearSelection(); // 기존에는 여기서 무조건 초기화해버려서 문제였음
+    this.startCell = e.target;
+    this.selectRange(this.startCell, e.target);
     if (e.target.tagName !== 'TD') return;
     this.isDragging = true;
     this.clearSelection(); // 기존 선택 초기화
@@ -180,9 +191,102 @@ export class VisualGenerator {
 
     this.clearSelection();
   }
-
   /**
-   * 4. 데이터 추출 (JSON 변환)
+   * 4. 우클릭 기능 (컨텍스트 메뉴)
+   */
+    handleContextMenu(e) {
+        e.preventDefault(); // 브라우저 기본 메뉴 차단
+
+        // 클릭된 요소가 셀(TD)인지 확인
+        if (e.target.tagName !== 'TD') return;
+
+    // [핵심 로직 수정]
+    // 1. 현재 클릭한 셀이 이미 선택된 그룹(selectedCells) 안에 포함되어 있는지 확인
+    const isClickedCellSelected = this.selectedCells.includes(e.target);
+
+    if (this.selectedCells.length > 0 && isClickedCellSelected) {
+        // [CASE A] 이미 드래그된 영역 내부를 우클릭함
+        // -> 선택을 유지해야 하므로 clearSelection()을 호출하지 않음!
+        // -> 아무 동작 없이 메뉴만 띄우면 됨
+    } else {
+        // [CASE B] 드래그 영역 밖을 우클릭했거나, 선택된 게 없을 때
+        // -> 기존 선택을 다 취소하고, 방금 클릭한 셀 하나만 선택함
+        this.clearSelection();
+        this.selectedCells = [e.target];
+        e.target.classList.add('selected');
+    }
+
+        // 메뉴 위치 계산 및 표시
+        this.showMenu(e.pageX, e.pageY);
+    }
+
+    showMenu(x, y) {
+        this.menu.style.display = 'block';
+        this.menu.style.left = `${x}px`;
+        this.menu.style.top = `${y}px`;
+    }
+
+    hideMenu() {
+        this.menu.style.display = 'none';
+    }
+
+    /**
+     * 기능 1: 타입 지정 (일괄 적용)
+     */
+    actionSetType() {
+        if (this.selectedCells.length === 0) return;
+        
+        // 첫 번째 셀의 현재 타입을 기본값으로
+        const currentType = this.selectedCells[0].dataset.type || '';
+        const newType = prompt("선택한 호실의 타입(Type)을 입력하세요.\n(예: 84A, 59B, 102P)", currentType);
+
+        if (newType !== null) { // 취소 누르지 않음
+            this.selectedCells.forEach(cell => {
+                cell.dataset.type = newType;
+                // 시각적 표시 (선택사항: 타입이 있으면 우측하단에 작게 표시 등)
+                // 지금은 데이터셋에만 저장
+            });
+            alert(`${this.selectedCells.length}개 호실의 타입이 '${newType}'(으)로 설정되었습니다.`);
+        }
+    }
+
+    /**
+     * 기능 2: 명칭 수정 (어린이집, 스카이라운지 등)
+     */
+    actionRename() {
+        if (this.selectedCells.length === 0) return;
+        
+        // 보통 특수 명칭은 병합된 셀 하나에 적용하므로 첫 번째 셀 기준
+        const cell = this.selectedCells[0];
+        const newName = prompt("이 공간의 명칭을 입력하세요.\n(예: 어린이집, 스카이라운지)", cell.textContent);
+
+        if (newName !== null) {
+            this.selectedCells.forEach(c => {
+                c.textContent = newName;
+                c.dataset.ho = newName; // 호수 대신 명칭 저장
+                c.classList.add('special'); // 특수 스타일 적용
+            });
+        }
+    }
+
+    /**
+     * 기능 3: 셀 삭제 (공간 없음 처리)
+     */
+    actionDelete() {
+        if (this.selectedCells.length === 0) return;
+
+        if (confirm("선택한 영역을 삭제(없는 공간 처리) 하시겠습니까?")) {
+            this.selectedCells.forEach(cell => {
+                cell.classList.remove('selected');
+                cell.classList.add('void'); // 투명/삭제 스타일
+                cell.dataset.active = "false"; // 데이터 추출 시 제외용
+                cell.textContent = ""; // 텍스트 제거
+            });
+            this.selectedCells = []; // 선택 해제
+        }
+    }
+  /**
+   * 5. 데이터 추출 (JSON 변환)
    * - 화면에 보이는 그대로 데이터를 만들어 리턴
    */
   exportData(dongName) {

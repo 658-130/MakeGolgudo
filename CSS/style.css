@@ -80,3 +80,96 @@
     box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* 그림자 효과 */
     background: white; /* 건물 배경 흰색 */
 }
+
+/* 우클릭 컨텍스트 메뉴 */
+#context-menu {
+    display: none; /* 기본적으로 숨김 */
+    position: absolute;
+    z-index: 1000;
+    width: 150px;
+    background: white;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    overflow: hidden;
+}
+
+#context-menu ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#context-menu li {
+    padding: 10px 15px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    transition: background 0.1s;
+}
+
+#context-menu li:last-child {
+    border-bottom: none;
+    color: #d9534f; /* 삭제 버튼은 빨간색 */
+}
+
+#context-menu li:hover {
+    background-color: #f5f5f5;
+}
+
+/* 삭제된 셀 (아예 없는 공간) */
+.grid-cell.void {
+    background: transparent !important;
+    border: none !important;
+    cursor: default;
+    color: transparent;
+    pointer-events: none; /* 클릭 불가 */
+}
+
+/* 특수 공간 (어린이집, 라운지 등) */
+.grid-cell.special {
+    background-color: #e1bee7; /* 연한 보라색 */
+    color: #4a148c;
+    font-weight: bold;
+}
+
+/* 동 라벨 (하단) */
+.dong-label {
+    text-align: center;
+    background-color: #333;
+    color: white;
+    font-weight: bold;
+    padding: 10px 0;
+    margin-top: 5px; /* 테이블과 간격 */
+    border-radius: 4px;
+    font-size: 1.2em;
+}
+
+/* 범례 (Legend) 영역 */
+.legend-container {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-top: 30px;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    flex-wrap: wrap;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.legend-color {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    border: 1px solid rgba(0,0,0,0.1);
+}

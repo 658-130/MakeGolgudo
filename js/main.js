@@ -70,4 +70,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         alert(`총 ${unitsData.length}개의 호실 데이터가 생성되었습니다.\n(콘솔창(F12)에서 JSON 데이터를 확인하세요)`);
     });
+    // 컨텍스트 메뉴 이벤트 연결
+    document.getElementById('menu-set-type').addEventListener('click', () => generator.actionSetType());
+    document.getElementById('menu-rename').addEventListener('click', () => generator.actionRename());
+    document.getElementById('menu-delete').addEventListener('click', () => generator.actionDelete());
 });
