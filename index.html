@@ -1,246 +1,349 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>아파트 옵션 관리자</title>
-    <link rel="stylesheet" href="css/style.css">
-    
-    <style>
-        /* [레이아웃] 전체 화면 분할 */
-        body { 
-            display: flex; 
-            margin: 0; 
-            height: 100vh; 
-            background: #f0f2f5; 
-            font-family: 'Noto Sans KR', sans-serif; 
-            padding: 0; /* 기존 padding 20px 제거 (전체화면 사용) */
-        }
-        
-        /* [좌측] 사이드바 메뉴 */
-        .sidebar {
-            width: 260px;
-            background: #2c3e50;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            padding: 20px 0;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            flex-shrink: 0; /* 사이드바 너비 고정 */
-        }
-        .logo { 
-            font-size: 20px; 
-            font-weight: bold; 
-            text-align: center; 
-            margin-bottom: 40px; 
-            color: #ecf0f1; 
-            border-bottom: 1px solid #34495e;
-            padding-bottom: 20px;
-        }
-        .menu-item {
-            padding: 15px 25px;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 16px;
-            border-left: 4px solid transparent;
-        }
-        .menu-item:hover { 
-            background: #34495e; 
-            color: #fff;
-        }
-        .menu-item.active { 
-            background: #2196f3; 
-            font-weight: bold; 
-            border-left-color: #fff; /* 활성 메뉴 강조 */
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>아파트 옵션 관리자</title>
+  <link rel="stylesheet" href="css/style.css">
 
-        /* [우측] 메인 컨텐츠 영역 */
-        .main-content {
-            flex: 1;
-            padding: 30px;
-            overflow-y: auto; /* 내용 넘치면 스크롤 */
-            position: relative;
-        }
+  <style>
+    /* [레이아웃] 전체 화면 분할 */
+    body {
+      display: flex;
+      margin: 0;
+      height: 100vh;
+      background: #f0f2f5;
+      font-family: 'Noto Sans KR', sans-serif;
+      padding: 0;
+    }
 
-        /* 섹션 전환 효과 */
-        .section { display: none; } /* 기본 숨김 */
-        .section.active { 
-            display: block; 
-            animation: fadeIn 0.3s ease-in-out; 
-        }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    /* [좌측] 사이드바 메뉴 */
+    .sidebar {
+      width: 260px;
+      background: #2c3e50;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      padding: 20px 0;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+      flex-shrink: 0;
+    }
 
-        /* [공통] 툴바 스타일 (기존 스타일 상속 + 보강) */
-        .toolbar { 
-            background: white; 
-            padding: 20px; 
-            border-radius: 8px; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
-            margin-bottom: 20px; 
-            display: flex; 
-            gap: 20px; 
-            align-items: center; 
-            flex-wrap: wrap; 
-        }
-        .group { 
-            display: flex; 
-            gap: 10px; 
-            align-items: center; 
-            border-right: 1px solid #ddd; 
-            padding-right: 20px; 
-        }
-        .group:last-child { border-right: none; }
-        
-        /* 버튼 & Input 스타일 */
-        input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 60px; text-align: center; }
-        
-        /* 현장명 입력박스 넓게 */
-        #gen-site, #edit-site-display { 
-            width: 250px !important; 
-            text-align: left !important; 
-            padding-left: 10px; 
-        }
-        
-        /* 버튼 색상 팔레트 */
-        button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; transition: opacity 0.2s; }
-        button:hover { opacity: 0.9; }
-        .btn-blue { background: #2196f3; }
-        .btn-green { background: #4caf50; }
-        .btn-red { background: #e74c3c; }
-        .btn-gray { background: #95a5a6; }
-        
-        /* 그리드 컨테이너 박스 (흰색 배경) */
-        .grid-container-box {
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            min-height: 600px;
-            overflow: auto;
-            display: flex;
-            align-items: flex-end; /* 건물 바닥 정렬 */
-            justify-content: center;
-            border-bottom: 3px solid #ddd; /* 지면 라인 */
-        }
-        
-        /* 안내 문구 */
-        .placeholder-text {
-            color: #999;
-            font-size: 1.2em;
-            margin-top: 100px;
-            align-self: flex-start; /* 중앙 정렬 무시하고 위로 */
-            width: 100%;
-            text-align: center;
-        }
+    .logo {
+      font-size: 20px;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 40px;
+      color: #ecf0f1;
+      border-bottom: 1px solid #34495e;
+      padding-bottom: 20px;
+    }
 
-        /* 우클릭 메뉴 스타일 */
-        #context-menu {
-            display: none; 
-            position: absolute; 
-            z-index: 1000; 
-            background: white; 
-            width: 180px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            border-radius: 8px; 
-            border: 1px solid #ddd;
-            overflow: hidden;
-        }
-        #context-menu ul { list-style: none; padding: 0; margin: 0; }
-        #context-menu li {
-            padding: 12px 15px; 
-            cursor: pointer; 
-            font-size: 14px; 
-            border-bottom: 1px solid #eee;
-            color: #333;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        #context-menu li:hover { background-color: #f5f5f5; color: #000; }
-        #context-menu li:last-child { border-bottom: none; color: #d32f2f; }
-    </style>
+    .menu-item {
+      padding: 15px 25px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 16px;
+      border-left: 4px solid transparent;
+    }
+
+    .menu-item:hover {
+      background: #34495e;
+      color: #fff;
+    }
+
+    .menu-item.active {
+      background: #2196f3;
+      font-weight: bold;
+      border-left-color: #fff;
+    }
+
+    /* [우측] 메인 컨텐츠 영역 */
+    .main-content {
+      flex: 1;
+      padding: 30px;
+      overflow-y: auto;
+      position: relative;
+    }
+
+    /* 섹션 전환 효과 */
+    .section {
+      display: none;
+    }
+
+    .section.active {
+      display: block;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* [공통] 툴바 스타일 */
+    .toolbar {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      border-right: 1px solid #ddd;
+      padding-right: 20px;
+    }
+
+    .group:last-child {
+      border-right: none;
+    }
+
+    /* 버튼 & Input 스타일 */
+    input {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 60px;
+      text-align: center;
+    }
+
+    #gen-site,
+    #edit-site-display {
+      width: 250px !important;
+      text-align: left !important;
+      padding-left: 10px;
+    }
+
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      color: white;
+      font-weight: bold;
+      transition: opacity 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    .btn-blue { background: #2196f3; }
+    .btn-green { background: #4caf50; }
+    .btn-red { background: #e74c3c; }
+    .btn-gray { background: #95a5a6; }
+
+    /* 그리드 컨테이너 박스 */
+    .grid-container-box {
+      background: white;
+      padding: 40px;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      min-height: 600px;
+      overflow: auto;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      border-bottom: 3px solid #ddd;
+    }
+
+    .placeholder-text {
+      color: #999;
+      font-size: 1.2em;
+      margin-top: 100px;
+      align-self: flex-start;
+      width: 100%;
+      text-align: center;
+    }
+
+    /* 우클릭 메뉴 스타일 */
+    #context-menu {
+      display: none;
+      position: absolute;
+      z-index: 1000;
+      background: white;
+      width: 180px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      overflow: hidden;
+    }
+
+    #context-menu ul { list-style: none; padding: 0; margin: 0; }
+
+    #context-menu li {
+      padding: 12px 15px;
+      cursor: pointer;
+      font-size: 14px;
+      border-bottom: 1px solid #eee;
+      color: #333;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #context-menu li:hover { background-color: #f5f5f5; color: #000; }
+    #context-menu li:last-child { border-bottom: none; color: #d32f2f; }
+
+    /* [신규] 글로벌 로딩 오버레이 스타일 */
+    #global-loader {
+      display: none; /* 기본 숨김 */
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5); /* 반투명 배경 */
+      z-index: 9999; /* 최상단 */
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      color: white;
+      font-weight: bold;
+      backdrop-filter: blur(2px); /* 배경 블러 효과 */
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 5px solid rgba(255, 255, 255, 0.3);
+      border-top: 5px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 15px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
+
 <body>
 
-    <div class="sidebar">
-        <div class="logo">🏗️ 아파트 옵션 관리자</div>
-        <div class="menu-item active" onclick="showSection('generator')">
-            🔨 골구도 생성
+  <div id="global-loader">
+    <div class="spinner"></div>
+    <div>데이터 처리 중입니다...</div>
+  </div>
+
+  <div class="sidebar">
+    <div class="logo">🏗️ 아파트 옵션 관리자</div>
+    <div class="menu-item active" onclick="showSection('generator')">
+      🔨 골구도 생성
+    </div>
+    <div class="menu-item" onclick="showSection('editor')">
+      ✏️ 골구도 수정
+    </div>
+    <div class="menu-item" onclick="showSection('viewer')">
+      👁️ 골구도 뷰어
+    </div>
+  </div>
+
+  <div class="main-content">
+
+    <div id="section-generator" class="section active">
+      <div class="toolbar">
+        <div class="group">
+          <label>🏗️ 현장명: <input type="text" id="gen-site" placeholder="예: 춘천레이크시티"></label>
         </div>
-        <div class="menu-item" onclick="showSection('editor')">
-            ✏️ 골구도 수정
+        <div class="group">
+          <label>동: <input type="text" id="gen-dong" value="101"></label>
+          <label>층: <input type="number" id="gen-floor" value="20"></label>
+          <label>라인: <input type="number" id="gen-line" value="4"></label>
+          <button class="btn-blue" id="btn-gen-create">골구도 생성</button>
         </div>
-        <div class="menu-item" onclick="showSection('viewer')">
-            👁️ 골구도 뷰어
-        </div>
+        <button class="btn-gray" id="btn-gen-undo" title="실수했을 때 이전 상태로 되돌립니다">↩️ 실행 취소</button>
+        <button class="btn-green" id="btn-gen-save" style="margin-left: auto;">💾 서버 저장</button>
+      </div>
+
+      <div id="gen-container" class="grid-container-box">
+        <div class="placeholder-text">상단 설정을 입력하고 '골구도 생성' 버튼을 눌러주세요.</div>
+      </div>
     </div>
 
-    <div class="main-content">
-        
-        <div id="section-generator" class="section active">
-            <div class="toolbar">
-                <div class="group">
-                    <label>🏗️ 현장명: <input type="text" id="gen-site" placeholder="예: 춘천레이크시티아이파크"></label>
-                </div>
-                <div class="group">
-                    <label>동: <input type="text" id="gen-dong" value="101"></label>
-                    <label>층: <input type="number" id="gen-floor" value="20"></label>
-                    <label>라인: <input type="number" id="gen-line" value="4"></label>
-                    <button class="btn-blue" id="btn-gen-create">그리드 생성</button>
-                </div>
-                <button class="btn-gray" id="btn-gen-undo" title="실수했을 때 이전 상태로 되돌립니다">↩️ 실행 취소</button>
-                <button class="btn-green" id="btn-gen-save" style="margin-left: auto;">💾 서버 저장</button>
-            </div>
-            
-            <div id="gen-container" class="grid-container-box">
-                <div class="placeholder-text">상단 설정을 입력하고 '그리드 생성' 버튼을 눌러주세요.</div>
-            </div>
+    <div id="section-editor" class="section">
+      <div class="toolbar">
+        <div class="group">
+          <label>📂 불러오기:
+            <select id="edit-select-dong" style="padding: 8px; width: 220px; border:1px solid #ccc; border-radius:4px;">
+              <option value="">현장 선택...</option>
+            </select>
+          </label>
+          <button class="btn-blue" id="btn-edit-load">불러오기</button>
         </div>
+        <div class="group">
+          <input type="text" id="edit-site-display" readonly style="background:#f9f9f9; color:#666;" title="현장명은 수정 불가">
+          <input type="text" id="edit-dong-display" readonly style="background:#f9f9f9; color:#666; width:60px;" title="동 번호는 수정 불가">
 
-        <div id="section-editor" class="section">
-            <div class="toolbar">
-                <div class="group">
-                    <label>📂 불러오기: 
-                        <select id="edit-select-dong" style="padding: 8px; width: 220px; border:1px solid #ccc; border-radius:4px;">
-                            <option value="">동 선택...</option>
-                        </select>
-                    </label>
-                    <button class="btn-blue" id="btn-edit-load">불러오기</button>
-                </div>
-                <div class="group">
-                    <input type="text" id="edit-site-display" readonly style="background:#f9f9f9; color:#666;" title="현장명은 수정 불가">
-                    <input type="text" id="edit-dong-display" readonly style="background:#f9f9f9; color:#666; width:60px;" title="동 번호는 수정 불가">
-                    
-                    <label>층 변경: <input type="number" id="edit-floor"></label>
-                    <label>라인 변경: <input type="number" id="edit-line"></label>
-                    <button class="btn-blue" id="btn-edit-apply">구조 변경 적용</button>
-                </div>
-                <button class="btn-red" id="btn-edit-delete">🗑️ 동 전체 삭제</button>
-                <button class="btn-green" id="btn-edit-update" style="margin-left: auto;">💾 수정사항 저장</button>
-            </div>
-            
-            <div id="edit-container" class="grid-container-box">
-                <div class="placeholder-text">수정할 동을 선택하고 '불러오기' 버튼을 눌러주세요.</div>
-            </div>
+          <label>층 변경: <input type="number" id="edit-floor"></label>
+          <label>라인 변경: <input type="number" id="edit-line"></label>
+          <button class="btn-blue" id="btn-edit-apply">구조 변경 적용</button>
         </div>
+        <button class="btn-red" id="btn-edit-delete">🗑️ 동 전체 삭제</button>
+        <button class="btn-green" id="btn-edit-update" style="margin-left: auto;">💾 수정사항 저장</button>
+      </div>
 
-        <div id="section-viewer" class="section">
-            <iframe src="viewer.html" style="width:100%; height:85vh; border:none; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1);"></iframe>
-        </div>
-
+      <div id="edit-container" class="grid-container-box">
+        <div class="placeholder-text">수정할 현장을 선택하고 '불러오기' 버튼을 눌러주세요.</div>
+      </div>
     </div>
 
-    <div id="context-menu">
-        <ul>
-            <li id="menu-set-type">🏷️ 타입 지정 (84A 등)</li>
-            <li id="menu-merge">🔗 선택 셀 병합</li>
-            <li id="menu-toggle">🚫 사용/제외 (X표시)</li>
-            <li id="menu-delete">🏗️ 셀 삭제 (공간 없음)</li>
-            <li id="menu-rename">✏️ 명칭 수정 (PH 등)</li>
-        </ul>
+    <div id="section-viewer" class="section">
+      <iframe id="viewer-frame" src="viewer.html" style="width:100%; height:85vh; border:none; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1);"></iframe>
     </div>
 
-    <script type="module" src="js/main_admin.js"></script>
+  </div>
+
+  <div id="context-menu">
+    <ul>
+      <li id="menu-set-type">🏷️ 타입 지정 (84A 등)</li>
+      <li id="menu-merge">🔗 선택 셀 병합</li>
+      <li id="menu-unmerge">💔 병합 해제</li>
+      <li id="menu-toggle">🚫 사용/제외 (X표시)</li>
+      <li id="menu-delete">🏗️ 셀 삭제 (공간 없음)</li>
+      <li id="menu-rename">✏️ 명칭 수정 (PH 등)</li>
+    </ul>
+  </div>
+
+  <script type="module" src="js/main_admin.js"></script>
+
+  <script>
+    // main_admin.js가 로드되기 전에 전역 함수 정의
+    window.showSection = function(sectionId) {
+      // 1. 섹션 전환
+      document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+      document.getElementById(`section-${sectionId}`).classList.add('active');
+
+      // 2. 메뉴 활성화
+      document.querySelectorAll('.menu-item').forEach(el => el.classList.remove('active'));
+      const menus = document.querySelectorAll('.menu-item');
+      if (sectionId === 'generator') menus[0].classList.add('active');
+      if (sectionId === 'editor') menus[1].classList.add('active');
+      if (sectionId === 'viewer') menus[2].classList.add('active');
+
+      // 3. [핵심] 뷰어 탭 클릭 시 Iframe 강제 새로고침
+      // (수정 사항을 즉시 반영하기 위함)
+      if (sectionId === 'viewer') {
+        const iframe = document.getElementById('viewer-frame');
+        if (iframe) {
+          iframe.src = iframe.src; // 강제 새로고침
+        }
+      }
+      
+      // 4. 수정기 탭 진입 시 동 목록 갱신 (Editor 인스턴스가 main_admin.js에 있어 이벤트로 처리하거나, 
+      // main_admin.js 내부에서 window.showSection을 덮어쓰도록 유도. 
+    };
+  </script>
 
 </body>
 </html>

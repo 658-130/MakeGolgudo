@@ -15,14 +15,21 @@ export class VisualEditor extends VisualGenerator {
     async loadDongList(selectElement) {
         const res = await SheetAPI.action('get_site_dong_list', {});
         
-        // 기존 옵션 초기화 (첫 번째 '선택하세요'만 남김)
-        selectElement.innerHTML = '<option value="">동 선택...</option>';
+        selectElement.innerHTML = '<option value="">현장 선택...</option>';
 
-        if(res.result === 'success') {
-            res.data.forEach(item => {
+            if(res.result === 'success') {
+            // [수정] 가나다순 정렬 로직 추가
+            // 현장명(site_name) 우선 정렬 후, 동일 현장 내에서 동(dong) 정렬
+            const sortedData = res.data.sort((a, b) => {
+                if (a.site_name < b.site_name) return -1;
+                if (a.site_name > b.site_name) return 1;
+                // 현장명이 같으면 동 번호로 정렬
+                return String(a.dong).localeCompare(String(b.dong), undefined, { numeric: true });
+            });
+            sortedData.forEach(item => {
                 const opt = document.createElement('option');
-                // value에 객체를 문자열로 저장하여 나중에 쉽게 파싱
-                opt.value = JSON.stringify(item); 
+                const valueObj = { site_name: item.site_name, dong: item.dong };
+                opt.value = JSON.stringify(valueObj); 
                 opt.textContent = `[${item.site_name}] ${item.dong}동`;
                 selectElement.appendChild(opt);
             });
@@ -36,14 +43,22 @@ export class VisualEditor extends VisualGenerator {
         this.siteName = site;
         this.dongName = dong;
         
-        // UI에 현장명/동 표시 (읽기 전용)
-        document.getElementById('edit-site-display').value = this.siteName;
-        document.getElementById('edit-dong-display').value = this.dongName;
+        // UI 표시
+        const siteInput = document.getElementById('edit-site-display');
+        const dongInput = document.getElementById('edit-dong-display');
+        if(siteInput) siteInput.value = this.siteName;
+        if(dongInput) dongInput.value = this.dongName;
 
-        // 서버에서 데이터 조회
+        // 서버 요청
         const res = await SheetAPI.action('read_dong_detail', { site_name: site, dong: dong });
+        
         if(res.result !== 'success') {
-            alert("데이터를 불러오는데 실패했습니다: " + res.message);
+            alert("데이터 로드 실패: " + res.message);
+            return;
+        }
+
+        if(!res.data || res.data.length === 0) {
+            alert("해당 동의 데이터가 없습니다.");
             return;
         }
 
@@ -54,135 +69,142 @@ export class VisualEditor extends VisualGenerator {
     /**
      * DB 데이터를 기반으로 그리드 복원
      */
-    renderFromData(units) {
+        renderFromData(units) {
+        // 기존 컨테이너 비우기
+        this.container.innerHTML = '';
+
         if (!units || units.length === 0) return;
 
-        // 1. 최대 층/라인 계산하여 그리드 틀 생성
-        const maxFloor = Math.max(...units.map(u => u.floor));
-        const maxLine = Math.max(...units.map(u => u.line));
+        // 1. 최대 층/라인 계산
+        const maxFloor = Math.max(...units.map(u => Number(u.floor)));
+        const maxLine = Math.max(...units.map(u => Number(u.line)));
         
         // 입력창 동기화
-        document.getElementById('edit-floor').value = maxFloor;
-        document.getElementById('edit-line').value = maxLine;
+        const floorInput = document.getElementById('edit-floor');
+        const lineInput = document.getElementById('edit-line');
+        if(floorInput) floorInput.value = maxFloor;
+        if(lineInput) lineInput.value = maxLine;
 
-        // 2. 빈 테이블 생성 (부모 클래스 메서드 사용)
-        this.createGrid(maxFloor, maxLine); 
+        // 2. 테이블 수동 생성 (createGrid 사용 안 함)
+        const table = document.createElement('table');
+        table.className = 'grid-table';
+        
+        // 드래그 방지
+        table.addEventListener('dragstart', (e) => e.preventDefault());
 
-        // 3. 데이터 매핑용 맵 생성
+        // 데이터 매핑
         const unitMap = new Map();
         units.forEach(u => unitMap.set(`${u.floor}_${u.line}`, u));
 
-        // 4. 각 셀에 속성(타입, 상태, 병합 등) 복구
-        const rows = this.table.querySelectorAll('tr');
-        rows.forEach(tr => {
-            const cells = tr.querySelectorAll('td');
-            cells.forEach(td => {
-                const f = parseInt(td.dataset.floor);
-                const l = parseInt(td.dataset.line);
+        // [핵심] 병합 처리를 위한 방문 기록 배열 (2차원)
+        // visited[층][라인] = true면 렌더링 건너뜀
+        const visited = Array.from({ length: maxFloor + 1 }, () => Array(maxLine + 1).fill(false));
+
+        for (let f = maxFloor; f >= 1; f--) {
+            const tr = document.createElement('tr');
+            for (let l = 1; l <= maxLine; l++) {
+                // 이미 병합된 영역에 포함된 곳이면 건너뜀 (밀림 방지)
+                if (visited[f][l]) continue;
+
                 const unit = unitMap.get(`${f}_${l}`);
+                const td = document.createElement('td');
+                td.className = 'grid-cell';
                 
+                // 기본 좌표 데이터 심기
+                td.dataset.floor = f;
+                td.dataset.line = l;
+
                 if (unit) {
-                    // 기본 텍스트 및 데이터셋 복구
+                    // 데이터 복구
                     td.textContent = unit.ho;
-                    td.dataset.ho = unit.ho; // 명칭이 변경되었을 수 있음
-                    if(unit.type) td.dataset.type = unit.type;
+                    td.dataset.ho = unit.ho;
+                    if (unit.type) td.dataset.type = unit.type;
                     
-                    // 상태 클래스 복구
-                    if(unit.is_void) {
+                    if (unit.is_void === true || unit.is_void === "TRUE") {
                         td.classList.add('void');
-                        td.textContent = '';
+                        td.textContent = ''; // Void는 텍스트 비움
                     }
-                    if(unit.is_disabled) td.classList.add('disabled');
-                    
-                    // 병합 처리 복구
-                    // DB에는 row_span이 저장되어 있음
-                    if(unit.row_span > 1) td.rowSpan = unit.row_span;
-                    if(unit.col_span > 1) td.colSpan = unit.col_span;
-                    
-                    // 병합된 셀(Head)이라면 클래스 추가
-                    if(unit.row_span > 1 || unit.col_span > 1) {
-                        td.classList.add('merged');
+                    if (unit.is_disabled === true || unit.is_disabled === "TRUE") {
+                        td.classList.add('disabled');
                     }
+
+                    // 병합 처리 (rowSpan / colSpan)
+                    const rs = Number(unit.row_span) || 1;
+                    const cs = Number(unit.col_span) || 1;
+
+                    if (rs > 1) td.rowSpan = rs;
+                    if (cs > 1) td.colSpan = cs;
+                    if (rs > 1 || cs > 1) td.classList.add('merged');
+
+                    // [중요] 병합된 영역만큼 visited 배열에 마킹하여 중복 생성 방지
+                    for (let i = 0; i < rs; i++) {
+                        for (let j = 0; j < cs; j++) {
+                            if (i === 0 && j === 0) continue; // 자기 자신은 제외
+                            const tf = f - i; 
+                            const tl = l + j;
+                            if (tf >= 1 && tl <= maxLine) {
+                                visited[tf][tl] = true; // 이곳은 그리지 말라고 표시
+                            }
+                        }
+                    }
+                } else {
+                    // 데이터가 없는 빈 셀 (기본값)
+                    // 호수 자동 생성 규칙 적용 (예: 501)
+                    const lineStr = l < 10 ? `0${l}` : `${l}`;
+                    td.textContent = `${f}${lineStr}`;
+                    td.dataset.ho = `${f}${lineStr}`;
                 }
-            });
-        });
 
-        // 5. 병합으로 인해 가려져야 할 셀들 숨김 처리 (Clean up)
-        // (간단하게: createGrid는 모든 셀을 생성하므로, 병합된 영역에 포함되는 셀을 찾아 숨겨야 함)
-        // 여기서는 VisualGenerator의 mergeCells 로직을 직접 호출하지 않고, 
-        // 데이터 기반으로 이미 rowSpan이 설정되었으므로, 가려질 셀들만 display:none 처리
+                tr.appendChild(td);
+            }
+            table.appendChild(tr);
+        }
+
+        this.container.appendChild(table);
+        this.table = table;
+
+        // 이벤트 리스너 다시 연결 (부모 클래스 메서드 활용)
+        this.reattachEvents();
         
-        // 다시 순회하며 숨김 처리
-        rows.forEach(tr => {
-            Array.from(tr.children).forEach(td => {
-                const f = parseInt(td.dataset.floor);
-                const l = parseInt(td.dataset.line);
-                
-                // 현재 셀이 누군가의 병합 영역에 포함되는지 확인
-                // (이 로직은 복잡할 수 있으므로, 간편하게 'DB에서 병합된 셀은 가져오지 않는 방식'이 아니라면
-                //  UI상에서 겹치는 부분을 지워야 함)
-                
-                // 팁: HTML Table 렌더링 시 rowSpan이 적용되면 그 자리에 있는 다음 셀들은 밀려납니다.
-                // 따라서 createGrid로 꽉 찬 테이블을 만든 뒤 rowSpan을 적용하면 테이블이 깨집니다.
-                // 해결책: rowSpan이 적용된 위치의 '가려질 셀'들을 DOM에서 제거해야 합니다.
-            });
-        });
-
-        // [중요] 병합된 테이블을 완벽히 복구하기 위해 
-        // "병합된 셀의 영향 범위에 있는 셀 삭제" 로직 실행
-        this.cleanupMergedCells();
+        // 히스토리 초기화 (불러온 직후는 Undo 불가)
+        this.historyStack = [];
     }
 
-    /**
-     * rowSpan/colSpan이 설정된 셀들에 의해 가려져야 할 셀들을 제거
-     */
-    cleanupMergedCells() {
-        // 위에서부터 순회하며 병합 정보를 확인
-        const cellsToRemove = [];
-        const rows = this.table.querySelectorAll('tr');
-        
-        // 2차원 배열처럼 접근하기 위해 매핑
-        // 하지만 DOM 조작이 복잡하므로, 가장 확실한 방법은 
-        // VisualGenerator의 mergeCells 로직을 활용하는 것이지만, 
-        // 여기서는 이미 rowSpan이 박혀있으므로 HTML Table 특성상 밀려난 셀들을 지워야 함.
-        
-        // 간단한 해결책: DB에 저장할 때 'merged=true'(숨겨진 셀) 정보를 저장했음.
-        // 따라서 그 정보를 기반으로 숨기면 됨.
-        
+    cleanupMergedCells(units) {
+        // units 데이터에 row_span/col_span 정보가 있으므로 이를 활용
         const unitMap = new Map();
-        this.currentData.forEach(u => unitMap.set(`${u.floor}_${u.line}`, u));
+        units.forEach(u => unitMap.set(`${u.floor}_${u.line}`, u));
 
-        rows.forEach(tr => {
-            tr.querySelectorAll('td').forEach(td => {
-                const f = parseInt(td.dataset.floor);
-                const l = parseInt(td.dataset.line);
-                
-                // DB상에 해당 좌표 데이터가 없거나(그럴린 없지만), 
-                // 해당 좌표가 병합되어 숨겨진 셀인지 확인해야 함.
-                // 하지만 현재 DB 구조상 is_merged 필드가 명시적으로 없어서(merged 셀은 저장 안 함 or status로 구분?),
-                // generator.js의 exportData를 보면 `cell.dataset.merged === "true"`인 셀은 저장을 안 하거나(skip),
-                // 저장하더라도 식별자가 필요함.
-                
-                // *수정 제안*: Code.gs/Generator.js 확인 결과, 병합되어 숨겨진 셀은 `units` 배열에 포함되지 않음(exportData에서 skip).
-                // 따라서 unitMap.get() 결과가 없는 셀은 "병합되어 사라진 셀"로 간주하고 삭제하면 됨.
-                
-                const unit = unitMap.get(`${f}_${l}`);
-                if (!unit) {
-                    td.style.display = 'none'; // 혹은 td.remove();
-                }
-            });
-        });
+        // 다시 순회하면서, 병합된 영역에 포함되는지 확인하는 것은 복잡하므로
+        // 간단히 "createGrid가 만든 셀" 중 "데이터(unit)가 없는 좌표"는 삭제된 셀로 간주하거나
+        // 병합 로직을 다시 적용해야 함.
+        
+        // 여기서는 가장 확실한 방법: createGrid로 만든 table을 기반으로
+        // 병합 정보를 다시 적용하여 가려질 셀을 숨김 (VisualGenerator의 mergeCells 로직 활용 불가하므로 수동 처리)
+        
+        const visited = new Set(); // 이미 처리된(보여지는) 셀들
+
+        // ... (복잡한 병합 복구 로직 생략하고 CSS로 가려진 셀 처리) ...
+        // 팁: 이미 rowSpan이 적용된 상태에서 HTML 테이블 렌더링 시, 
+        // 브라우저가 알아서 밀어내기 때문에 "밀려난 셀"을 제거해야 모양이 맞음.
+        
+        // [해결책] : renderFromData에서 createGrid를 호출하지 말고, 
+        // 데이터를 기반으로 TR/TD를 직접 생성하는 것이 더 안전함. 
+        // 하지만 기존 구조 유지를 위해, createGrid 직후 rowSpan 적용 시
+        // "겹치는 위치의 TD"를 DOM에서 제거하는 로직을 추가합니다.
+
+        // (이 부분은 너무 길어지므로 일단 기본 렌더링만 확인하시고, 
+        //  병합이 깨진다면 Editor에서는 병합을 풀고 보여주는 것이 수정하기에 더 편할 수 있습니다.)
     }
 
     /**
      * 구조 변경 (층/라인 수정) 적용
      */
     applyStructureChange(newFloor, newLine) {
-        // 1. 현재 화면의 데이터를 추출 (수정 중이던 내용 보존)
-        // 주의: exportData는 siteName, dongName이 필요
-        const currentEditData = this.exportData(this.siteName, this.dongName);
+        if(!this.siteName) return;
+        const currentData = this.exportData(this.siteName, this.dongName);
         
-        // 2. 그리드 새로 생성 (크기 변경)
+        // 새 그리드 생성
         this.createGrid(newFloor, newLine);
         
         // 3. 기존 데이터 좌표 매칭하여 복구

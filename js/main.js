@@ -91,5 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('menu-rename').addEventListener('click', () => generator.actionRename());
     document.getElementById('menu-delete').addEventListener('click', () => generator.actionDelete());
     document.getElementById('menu-merge').addEventListener('click', () => generator.actionMerge());
+    document.getElementById('menu-unmerge').addEventListener('click', () => generator.actionUnmerge());
     document.getElementById('menu-toggle').addEventListener('click', () => generator.actionToggleDisable());
 });

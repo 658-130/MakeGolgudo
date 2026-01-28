@@ -210,16 +210,27 @@ export class VisualGenerator {
         if (newType !== null) {
             this.selectedCells.forEach(cell => {
                 cell.dataset.type = newType;
+                // Void가 아닐 때만 색상 힌트
                 if(!cell.classList.contains('void')) cell.style.backgroundColor = '#e8f5e9'; 
             });
         }
     }
 
+    // [기존 유지] 병합
     actionMerge() {
-        if (this.selectedCells.length < 2) return;
+        // .selectedCells는 함수가 아니라 '배열'이므로 ()를 붙이면 안 됩니다.
+        if (this.selectedCells.length < 2) {
+            alert("병합할 셀을 2개 이상 선택해주세요.");
+            return;
+        }
         this.saveState();
-        
-        // 1. 범위 계산
+        this.mergeCells();
+    }
+    /**
+     * 실제 셀 병합 로직 (작업자)
+     */
+    mergeCells() {
+        // 1. 선택된 셀들의 전체 범위(최소/최대 층과 라인) 계산
         let minF = Infinity, maxF = -Infinity, minL = Infinity, maxL = -Infinity;
         this.selectedCells.forEach(cell => {
             const f = parseInt(cell.dataset.floor);
@@ -230,28 +241,87 @@ export class VisualGenerator {
             if (l > maxL) maxL = l;
         });
 
-        // 2. 기준 셀(좌상단) 찾기
+        // 2. 기준 셀(좌상단 셀) 찾기
+        // 우리 그리드 구조상 가장 높은 층(maxF)과 가장 낮은 라인(minL)이 기준입니다.
         const rootCell = this.table.querySelector(`td[data-floor="${maxF}"][data-line="${minL}"]`);
-        if (!rootCell) return;
+        
+        if (!rootCell) {
+            alert("기준 셀을 찾을 수 없습니다.");
+            return;
+        }
 
+        // 3. 병합 크기 계산
         const rowSpan = (maxF - minF) + 1;
         const colSpan = (maxL - minL) + 1;
 
-        // 3. 병합 적용
+        // 4. 기준 셀에 병합 속성 적용
         rootCell.rowSpan = rowSpan;
         rootCell.colSpan = colSpan;
-        rootCell.classList.add('merged');
+        rootCell.classList.add('merged'); // 병합된 셀임을 표시하는 클래스 추가
 
-        // 4. 나머지 셀 숨김
+        // 5. 나머지 셀들 숨김 처리 (데이터 유지를 위해 삭제가 아닌 display: none 처리)
         this.selectedCells.forEach(cell => {
             if (cell !== rootCell) {
                 cell.style.display = 'none';
-                cell.dataset.merged = "true"; 
+                cell.dataset.merged = "true"; // 데이터 추출 시 제외하기 위한 플래그
             }
         });
+
+        // 6. 선택 해제
         this.clearSelection();
     }
 
+    // [신규 기능] 병합 해제
+    actionUnmerge() {
+        // 선택된 셀 중 병합된 셀(merged class 또는 rowSpan/colSpan > 1)이 있는지 확인
+        const mergedCells = this.selectedCells.filter(cell => 
+            cell.rowSpan > 1 || cell.colSpan > 1 || cell.classList.contains('merged')
+        );
+
+        if (mergedCells.length === 0) {
+            // 선택된 셀이 없다면, 현재 우클릭한 셀(startCell)이 병합된 셀인지 확인해볼 수 있음
+            // 하지만 UX상 명시적으로 선택하고 누르는 게 안전함.
+            alert("병합된 셀을 선택해주세요.");
+            return;
+        }
+
+        this.saveState(); // 실행 취소 저장
+
+        mergedCells.forEach(rootCell => {
+            const rs = rootCell.rowSpan;
+            const cs = rootCell.colSpan;
+            const startF = parseInt(rootCell.dataset.floor);
+            const startL = parseInt(rootCell.dataset.line);
+
+            // 1. 병합 속성 초기화
+            rootCell.rowSpan = 1;
+            rootCell.colSpan = 1;
+            rootCell.classList.remove('merged');
+
+            // 2. 숨겨졌던 셀들(display: none)을 다시 보이게 처리
+            // 병합 범위: [startF ~ startF-(rs-1)] , [startL ~ startL+(cs-1)]
+            // 주의: 우리 그리드는 위쪽(f)이 큰 숫자
+            
+            for(let i = 0; i < rs; i++) {
+                for(let j = 0; j < cs; j++) {
+                    if(i===0 && j===0) continue; // 본인은 제외
+                    
+                    const targetF = startF - i;
+                    const targetL = startL + j;
+                    
+                    const hiddenCell = this.table.querySelector(`td[data-floor="${targetF}"][data-line="${targetL}"]`);
+                    if(hiddenCell) {
+                        hiddenCell.style.display = ''; // 보임 처리
+                        hiddenCell.dataset.merged = "false"; // 플래그 해제
+                    }
+                }
+            }
+        });
+        
+        this.clearSelection();
+    }
+
+    // [기존 유지] 사용/제외 토글
     actionToggleDisable() {
         if (this.selectedCells.length === 0) return;
         this.saveState();
@@ -262,19 +332,38 @@ export class VisualGenerator {
         this.clearSelection();
     }
 
+    // [기능 개선] 삭제 / 복구 토글 (Toggle)
     actionDelete() {
         if (this.selectedCells.length === 0) return;
-        if (confirm("선택한 영역을 삭제(Void) 처리하시겠습니까?")) {
-            this.saveState();
-            this.selectedCells.forEach(cell => {
-                cell.classList.add('void');
-                cell.classList.remove('disabled');
-                cell.textContent = ''; 
-            });
-            this.clearSelection();
+
+        // 선택된 셀 중 하나라도 void가 아니면 -> 모두 void로 (삭제)
+        // 모두 void라면 -> 모두 복구
+        const hasActive = this.selectedCells.some(cell => !cell.classList.contains('void'));
+        
+        this.saveState();
+
+        if (hasActive) {
+            // 삭제 모드
+            if (confirm("선택한 영역을 삭제(Void) 처리하시겠습니까?")) {
+                this.selectedCells.forEach(cell => {
+                    cell.classList.add('void');
+                    cell.classList.remove('disabled');
+                    // 텍스트는 데이터셋에 남아있으므로 비워도 됨 (복구 시 다시 채움)
+                    // 하지만 편의상 텍스트는 안보이게 CSS 처리되어 있으므로 유지해도 됨.
+                });
+            }
+        } else {
+            // 복구 모드
+            if (confirm("선택한 영역을 복구하시겠습니까?")) {
+                this.selectedCells.forEach(cell => {
+                    cell.classList.remove('void');
+                });
+            }
         }
+        this.clearSelection();
     }
 
+    // [기존 유지] 명칭 수정
     actionRename() {
         if (this.selectedCells.length === 0) return;
         this.saveState();

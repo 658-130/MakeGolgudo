@@ -1,26 +1,46 @@
 // js/api.js
 
-// 방금 복사한 GAS 웹 앱 URL을 여기에 붙여넣으세요.
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxxnax7ZCRLBeevdxJBs58PMQ606l0DRQkjDgxECxG7XcZAPUX__b1r5rutQUrlcBdCkw/exec"; 
+const API_URL = "https://script.google.com/macros/s/AKfycbxxnax7ZCRLBeevdxJBs58PMQ606l0DRQkjDgxECxG7XcZAPUX__b1r5rutQUrlcBdCkw/exec"; // [필수] 배포 후 URL 입력
+
+// 로딩 화면 제어 함수 (전역 사용)
+window.showLoading = () => {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'flex';
+};
+
+window.hideLoading = () => {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'none';
+};
 
 export const SheetAPI = {
-  /**
-   * 데이터를 구글 시트로 전송 (C/U/D)
-   * @param {string} type - 액션 타입 (예: 'create_bulk')
-   * @param {object} payload - 전송할 데이터 본문
-   */
-  async action(type, payload) {
-    // GAS는 POST 요청을 보낼 때 text/plain으로 보내야 CORS 에러를 피하기 쉽습니다.
-    const response = await fetch(GAS_URL, {
-      method: "POST",
-      // mode: "no-cors", // 주의: no-cors를 쓰면 응답 내용을 못 읽음. GAS 배포 설정이 올바르면 cors 모드 사용 가능.
-      headers: {
-        "Content-Type": "text/plain;charset=utf-8", 
-      },
-      body: JSON.stringify({ action: type, ...payload }),
-    });
+    action: async (actionName, payload = {}) => {
+        // 1. 요청 시작 시 로딩 표시
+        window.showLoading();
 
-    const result = await response.json();
-    return result;
-  },
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                mode: 'cors',
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8',
+                },
+                body: JSON.stringify({ action: actionName, data: payload }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            return result;
+
+        } catch (error) {
+            console.error("API Error:", error);
+            return { result: "error", message: error.toString() };
+        } finally {
+            // 2. 요청 종료(성공/실패) 시 로딩 숨김
+            window.hideLoading();
+        }
+    }
 };
